@@ -1,23 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Settings, Calendar, Lock, Unlock, CheckCircle, 
-  Clock, Plus, Trash2, Users, Edit2, Coffee, 
-  ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, ArrowLeftRight, GripVertical
+  Settings, Calendar, Unlock, CheckCircle, 
+  Clock, Plus, Trash2, Users, Coffee, 
+  ArrowLeftRight, GripVertical, ChevronsUp, ArrowUp, ArrowDown, ChevronsDown, X
 } from 'lucide-react';
-import defaultMembers from './config/members.json';
+
+// 【改动1】导入新的总数据文件
+import initialData from './config/data.json'; 
 
 const App = () => {
-  const [members, setMembers] = useState(defaultMembers);
+  // 【改动2】初始化成员：从 initialData.members 读取
+  const [members, setMembers] = useState(initialData.members || []);
 
+  // 【改动3】初始化时间：优先读 JSON，其次读 LocalStorage，最后自动计算
   const [meetingDate, setMeetingDate] = useState(() => {
+    // A. 优先尝试从 JSON 文件读取 (这是“服务器/后端”给的最新时间)
+    if (initialData.meetingDate) {
+      const d = new Date(initialData.meetingDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    // B. 如果 JSON 里没有，再看看本地缓存 (容错)
     const saved = localStorage.getItem('meeting_date_v2');
-    if (saved) return new Date(saved);
+    if (saved) {
+      const d = new Date(saved);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    // C. 都没有，自动计算下一个周五
     const d = new Date();
     d.setDate(d.getDate() + (5 + 7 - d.getDay()) % 7);
     return d;
   });
 
-  // 使用 sessionStorage 保持登录状态
   const [isAdmin, setIsAdmin] = useState(() => {
     return sessionStorage.getItem('app_is_admin') === 'true';
   });
@@ -27,8 +42,8 @@ const App = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [showSortModal, setShowSortModal] = useState(false);
+  const [pendingMembers, setPendingMembers] = useState([]);
 
-  // Drag Refs
   const dragItemIndex = useRef(null);
   const dragOverIndex = useRef(null);
 
@@ -40,63 +55,32 @@ const App = () => {
     sessionStorage.setItem('app_is_admin', isAdmin);
   }, [isAdmin]);
 
-  const saveMembersToConfig = async (list) => {
+  // 【改动4】通用的保存函数：同时保存 成员列表 和 当前时间
+  // 注意：需要传入当前的 members 和 date，因为 React 的 state 在函数闭包里可能不是最新的
+  const saveDataToBackend = async (currentMembers, currentDate) => {
     try {
-      await fetch('/api/save-members', {
+      await fetch('/api/save-data', { // 假设接口改成 save-data
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ members: list }),
+        body: JSON.stringify({ 
+          members: currentMembers, 
+          meetingDate: currentDate.toISOString() 
+        }),
       });
-    } catch (e) {}
+    } catch (e) {
+      console.error("Save failed", e);
+    }
   };
 
-  // --- 核心操作 (带事件阻断) ---
-  const moveItem = (e, fromIndex, toIndex) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation(); // 关键：阻止事件冒泡，防止弹窗关闭
-    }
-    if (toIndex < 0 || toIndex >= members.length) return;
-    const newMembers = [...members];
-    const [moved] = newMembers.splice(fromIndex, 1);
-    newMembers.splice(toIndex, 0, moved);
+  // 封装一个快捷保存，默认使用当前 state 中的日期
+  // 用于：只调整了顺序，没调整时间的情况
+  const saveMembersOnly = (newMembers) => {
     setMembers(newMembers);
-    saveMembersToConfig(newMembers);
+    saveDataToBackend(newMembers, meetingDate);
   };
 
-  const moveToTop = (e, index) => moveItem(e, index, 0);
-  const moveToBottom = (e, index) => moveItem(e, index, members.length - 1);
-  const removeMemberWithStop = (e, id) => {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    if (window.confirm('移除该成员？')) {
-      const next = members.filter(m => m.id !== id);
-      setMembers(next);
-      saveMembersToConfig(next);
-    }
-  };
-  
-  const swapSpeakers = (e) => {
-    if(e) { e.preventDefault(); e.stopPropagation(); }
-    if (members.length < 2) return;
-    const newMembers = [...members];
-    const [first] = newMembers.splice(0, 1);
-    newMembers.splice(1, 0, first);
-    setMembers(newMembers);
-    saveMembersToConfig(newMembers);
-  };
+  // --- 核心业务逻辑 ---
 
-  // --- 拖拽逻辑 ---
-  const handleSortDragEnd = () => {
-    const from = dragItemIndex.current;
-    const to = dragOverIndex.current;
-    if (from !== null && to !== null && from !== to) {
-      moveItem(null, from, to); // 拖拽不需要传 e
-    }
-    dragItemIndex.current = null;
-    dragOverIndex.current = null;
-  };
-
-  // --- 其他业务逻辑 ---
   const handleLogin = (e) => {
     e.preventDefault();
     if (passwordInput === '1234') {
@@ -115,21 +99,34 @@ const App = () => {
     if (members.length === 0) return;
     const currentNames = members.slice(0, 2).map(m => m.name).join(' & ');
     if (!window.confirm(`🎉 确认 ${currentNames} 讲完了？`)) return;
+    
+    // 1. 计算新名单
     const newMembers = [...members];
     const finished = newMembers.splice(0, Math.min(2, newMembers.length));
     newMembers.push(...finished);
-    setMembers(newMembers);
-    saveMembersToConfig(newMembers);
+    
+    // 2. 计算新时间
     const newDate = new Date(meetingDate);
     newDate.setDate(newDate.getDate() + 7);
+    
+    // 3. 更新状态
+    setMembers(newMembers);
     setMeetingDate(newDate);
+
+    // 4. 【关键】保存两样东西到后端
+    saveDataToBackend(newMembers, newDate);
   };
 
   const handlePostpone = () => {
     if (!window.confirm('☕️ 确认本周休息/延期？')) return;
+    
     const newDate = new Date(meetingDate);
     newDate.setDate(newDate.getDate() + 7);
+    
     setMeetingDate(newDate);
+    
+    // 延期时，名单没变，但时间变了，也要保存
+    saveDataToBackend(members, newDate);
   };
 
   const handleAddMember = () => {
@@ -137,12 +134,68 @@ const App = () => {
     const newItem = { id: Date.now().toString(), name: newMemberName.trim() };
     const next = [...members, newItem];
     setMembers(next);
-    saveMembersToConfig(next);
+    saveDataToBackend(next, meetingDate); // 保存
     setNewMemberName('');
     setShowAddModal(false);
   };
 
-  const waitingGroups = Array.from({ length: Math.ceil(members.slice(2).length / 2) }, (v, i) => members.slice(2).slice(i * 2, i * 2 + 2));
+  // --- 排序相关 ---
+  const openSortModal = () => {
+    setPendingMembers([...members]); 
+    setShowSortModal(true);
+  };
+
+  const closeSortModal = () => {
+    setPendingMembers([]);
+    setShowSortModal(false);
+  };
+
+  const saveSortChanges = () => {
+    if (pendingMembers && pendingMembers.length > 0) {
+      // 保存排序后的名单，时间保持不变
+      saveMembersOnly(pendingMembers);
+    }
+    closeSortModal();
+  };
+
+  // ... (中间的 moveItemInModal 等 helper 函数保持不变，因为它们只操作 pendingMembers) ...
+  const moveItemInModal = (fromIndex, toIndex) => {
+    if (!pendingMembers || toIndex < 0 || toIndex >= pendingMembers.length) return;
+    const newMembers = [...pendingMembers];
+    const [moved] = newMembers.splice(fromIndex, 1);
+    newMembers.splice(toIndex, 0, moved);
+    setPendingMembers(newMembers);
+  };
+  const moveToTopInModal = (index) => moveItemInModal(index, 0);
+  const moveToBottomInModal = (index) => moveItemInModal(index, pendingMembers.length - 1);
+  const removeMemberInModal = (id) => {
+    const next = pendingMembers.filter(m => m.id !== id);
+    setPendingMembers(next);
+  };
+  const swapSpeakersInModal = () => {
+    if (!pendingMembers || pendingMembers.length < 2) return;
+    const newMembers = [...pendingMembers];
+    const [first] = newMembers.splice(0, 1);
+    newMembers.splice(1, 0, first);
+    setPendingMembers(newMembers);
+  };
+  const handleSortDragEnd = () => {
+    const from = dragItemIndex.current;
+    const to = dragOverIndex.current;
+    if (from !== null && to !== null && from !== to) {
+      moveItemInModal(from, to);
+    }
+    dragItemIndex.current = null;
+    dragOverIndex.current = null;
+  };
+
+
+  // 计算分组
+  const waitingList = members && members.length > 2 ? members.slice(2) : [];
+  const waitingGroups = Array.from(
+    { length: Math.ceil(waitingList.length / 2) }, 
+    (_, i) => waitingList.slice(i * 2, i * 2 + 2)
+  );
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] text-slate-700 font-sans pb-20">
@@ -206,7 +259,7 @@ const App = () => {
               <CheckCircle size={24} className="text-emerald-400" />
               <span className="font-bold text-sm">完成本周</span>
             </button>
-            <button type="button" onClick={() => setShowSortModal(true)} className="bg-teal-600 hover:bg-teal-700 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+            <button type="button" onClick={openSortModal} className="bg-teal-600 hover:bg-teal-700 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
               <ArrowLeftRight size={24} className="text-teal-200" />
               <span className="font-bold text-sm">调整顺序</span>
             </button>
@@ -246,14 +299,14 @@ const App = () => {
         </section>
       </main>
 
-      {/* --- 排序弹窗 (修复闪退问题) --- */}
+      {/* --- 排序弹窗 --- */}
       {showSortModal && (
-        // 1. 外层背景点击：只有点击这里才会关闭
         <div 
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setShowSortModal(false)} 
+          onClick={(e) => {
+             if(e.target === e.currentTarget) closeSortModal();
+          }} 
         >
-          {/* 2. 内部容器：阻止事件冒泡到外层 */}
           <div 
             className="w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()} 
@@ -264,11 +317,11 @@ const App = () => {
                 <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
                   <ArrowLeftRight size={22} className="text-teal-600"/> 调整顺序
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">点击按钮或拖拽，操作实时生效</p>
+                <p className="text-xs text-slate-400 mt-1">拖拽或点击调整，按底部按钮保存</p>
               </div>
               <button 
                 type="button" 
-                onClick={(e) => swapSpeakers(e)} 
+                onClick={swapSpeakersInModal} 
                 className="text-xs font-bold bg-teal-50 text-teal-700 px-3 py-1.5 rounded-lg hover:bg-teal-100 transition-colors"
               >
                  交换前两名
@@ -277,7 +330,7 @@ const App = () => {
             
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
-              {members.map((m, index) => {
+              {pendingMembers && pendingMembers.map((m, index) => {
                 const isSpeaker = index < 2;
                 return (
                   <div 
@@ -307,34 +360,40 @@ const App = () => {
                       </div>
                     </div>
 
-                    {/* 按钮组：全部显式阻止冒泡 */}
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={(e) => moveToTop(e, index)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded"><ChevronsUp size={16}/></button>
-                      <button type="button" onClick={(e) => moveItem(e, index, index - 1)} disabled={index === 0} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowUp size={16}/></button>
-                      <button type="button" onClick={(e) => moveItem(e, index, index + 1)} disabled={index === members.length - 1} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowDown size={16}/></button>
-                      <button type="button" onClick={(e) => moveToBottom(e, index)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded"><ChevronsDown size={16}/></button>
+                      <button type="button" onClick={() => moveToTopInModal(index)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded"><ChevronsUp size={16}/></button>
+                      <button type="button" onClick={() => moveItemInModal(index, index - 1)} disabled={index === 0} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowUp size={16}/></button>
+                      <button type="button" onClick={() => moveItemInModal(index, index + 1)} disabled={index === pendingMembers.length - 1} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowDown size={16}/></button>
+                      <button type="button" onClick={() => moveToBottomInModal(index)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded"><ChevronsDown size={16}/></button>
                       <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                      <button type="button" onClick={(e) => removeMemberWithStop(e, m.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 size={16}/></button>
+                      <button type="button" onClick={() => removeMemberInModal(m.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 size={16}/></button>
                     </div>
                   </div>
                 )
               })}
             </div>
 
-            <div className="p-4 border-t border-slate-100 bg-white flex-shrink-0">
+            <div className="p-4 border-t border-slate-100 bg-white flex-shrink-0 grid grid-cols-2 gap-3">
               <button 
                 type="button"
-                onClick={() => setShowSortModal(false)}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200 active:scale-[0.98]"
+                onClick={closeSortModal}
+                className="py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-bold transition-all border border-transparent hover:border-slate-200"
               >
-                完成调整
+                取消
+              </button>
+              <button 
+                type="button"
+                onClick={saveSortChanges}
+                className="py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200 active:scale-[0.98]"
+              >
+                确认并保存
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Login Modal */}
+      {/* Login / Add Modals (保持不变)... */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowLoginModal(false)}>
           <div className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-xs animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
@@ -349,8 +408,6 @@ const App = () => {
           </div>
         </div>
       )}
-
-      {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
           <div className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-xs animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
