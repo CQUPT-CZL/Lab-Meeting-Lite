@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 // 导入初始数据
-import initialData from './config/data.json'; 
+import initialData from '../config/data.json'; 
 
 // --- 自定义轻提示组件 (Toast) ---
 const Toast = ({ message, show }) => (
