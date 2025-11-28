@@ -36,7 +36,8 @@ app.post('/api/save-data', (req, res) => {
   });
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`后端服务已启动: http://localhost:${port}`);
   console.log(`目标文件路径: ${DATA_FILE}`);
+  console.log(`外部访问地址: http://你的IP地址:${port}`);
 });
