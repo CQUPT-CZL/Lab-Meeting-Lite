@@ -239,6 +239,9 @@ const App = () => {
             <a href="https://github.com/CQUPT-CZL/Lab-Meeting-Lite" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors" aria-label="GitHub">
               <Github size={18} />
             </a>
+            <a href="http://monitor.cuizl.cn/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors" aria-label="Monitor">
+              🚀
+            </a>
             <button 
               onClick={() => isAdmin ? handleLogout() : setShowLoginModal(true)} 
               className={`flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-full transition-all border shadow-sm active:scale-95 ${isAdmin ? 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
