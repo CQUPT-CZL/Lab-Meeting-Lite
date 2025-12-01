@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lab Meeting Lite</title>
-    <link rel="icon" href="/favicon.svg" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>立立小组组会</title>
   </head>
   <body>
+    <!-- React 挂载点，必须叫 root，因为 main.jsx 里在找这个 id -->
     <div id="root"></div>
+    
+    <!-- 核心逻辑：这里引入了 src 下的 JS 入口 -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

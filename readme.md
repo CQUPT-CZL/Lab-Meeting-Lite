@@ -43,15 +43,37 @@
   - 会议日期：`meeting_date_v2`（`localStorage`）
   - 管理员状态：`app_is_admin`（`sessionStorage`）
 
-### 可选：启用本地后端（持久化到文件）
+### 启用本地后端（FastAPI，持久化到文件）
 
-如需在刷新后保留成员顺序与名单，请启动本地后端：
+如需在刷新后保留成员顺序与名单，请启动 FastAPI 后端：
 
 ```bash
-node server.js
+# 安装后端依赖（建议使用虚拟环境）
+pip install -r backend/requirements.txt
+
+# 启动服务（默认端口 8000）
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-后端会监听 `POST /api/save-data`，并将数据写入 `src/config/data.json`。前端在变更后会自动调用保存接口。
+后端监听 `POST /api/save-data`，将数据写入 `src/config/data.json`。前端在变更后会自动调用保存接口。
+
+如之前使用了 Node/Express 后端（`server.js`），该文件已不再需要。
+已删除 Vite 开发插件与 Node 依赖，避免混乱。
+
+## 端口与地址配置
+
+- 后端端口
+  - 默认运行：`uvicorn backend.main:app --host 0.0.0.0 --port 8000`
+  - 指定端口示例（改为 9000）：`uvicorn backend.main:app --host 0.0.0.0 --port 9000`
+- 前端端口
+  - 临时指定端口（改为 3005）：`npm run dev -- --host --port 3005`
+  - 或修改默认端口：`vite.config.js` 中 `server.port`
+- 前后端地址对齐
+  - 前端通过环境变量指定后端地址：编辑 `.env.development`
+  - 示例：`VITE_API_BASE=http://localhost:8000`（如果后端改为 9000，则改为 `http://localhost:9000`）
+  - 生产环境可在 `.env.production` 中设置同名变量以指向线上后端
+ - 域名访问
+   - 若通过域名访问前端开发服务器，需在 `vite.config.js` 的 `server.allowedHosts` 中加入你的域名，例如：`['meeting.cuizl.cn']`
 
 ## 🧭 使用说明
 
@@ -71,12 +93,12 @@ node server.js
 - 修改初始名单与日期：直接编辑 `src/config/data.json`
 - Tailwind 通过 CDN 加载，若需离线/自定义构建，可改为本地安装 Tailwind 并配置 PostCSS
 
-## 📦 部署建议
+## 部署建议
 
 - 纯前端部署：可直接将构建产物部署到任意静态托管平台（如 GitHub Pages、Vercel 等）
 - 数据持久化：需要跨刷新保留名单与顺序时，请同时运行本地后端或替换为你的后端服务
 
-## 🔗 链接
+## 链接
 
 - GitHub：<https://github.com/CQUPT-CZL/Lab-Meeting-Lite>
 

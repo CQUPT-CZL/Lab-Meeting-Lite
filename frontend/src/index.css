@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 可以在这里添加一些全局补丁，防止某些浏览器默认样式干扰 */
+body {
+  @apply bg-slate-50 text-slate-900;
+}
