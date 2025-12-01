@@ -1,108 +1,76 @@
-# 📅 Lab Meeting Lite | 学术组会排班助手
+# Lab Meeting Lite
 
-轻量、现代、好看好用的科研组会轮值排班系统。支持双人分组、拖拽排序和管理员模式，开箱即用。
+轻量、现代的科研组会轮值排班系统。包含前端（React + Vite）与后端（FastAPI）两部分，并提供 Nginx 反向代理示例配置。
 
-<img src="./image.png" alt="Lab Meeting Lite 界面预览" width="900" />
+![界面预览](./image.png)
 
-## ✨ 特性
+**对应子文档**：
+- 项目前端说明：`frontend/README.md`
+- 项目后端说明：`backend/README.md`
 
-- 👥 双人分组：后续队列自动两两分组，贴合常见组会节奏
-- 🎨 现代化 UI：清新配色与动效，信息层次清晰
-- 🔒 管理员模式：默认密码 `1234`，支持增删改与排序
-- 🪄 拖拽与快捷操作：拖拽排序、置顶/置底、交换前两位等常用操作
-- ⏭️ 智能流转：一键“完成本周”后，当前两位移至队尾，日期顺延一周
-- 💾 轻量持久化：内置本地缓存；可选本地后端，将变更写入 `src/config/data.json`
+## 项目结构
 
-## 🧱 技术栈
+- `frontend/` 前端应用（React、Vite、Tailwind）
+- `backend/` 后端服务（FastAPI、Uvicorn、Pydantic）
+- `deploy/nginx.conf` Nginx 部署示例（静态资源与 `/api` 反向代理）
 
-- `React 19` + `Vite 7`
-- `Tailwind CSS`（通过 CDN 加载：`https://cdn.tailwindcss.com`）
-- 图标：`lucide-react`
+## 技术栈
 
-## 🚀 快速开始
+- 前端：`React 18`、`Vite 5`、`Tailwind CSS 3`、`lucide-react`
+- 后端：`FastAPI`、`Uvicorn`、`Pydantic`
 
-1. 安装依赖
-   ```bash
-   npm install
-   ```
-2. 本地开发
-   ```bash
-   npm run dev
-   ```
-3. 生产构建与预览
-   ```bash
-   npm run build
-   npm run preview
-   ```
+## 运行要求
 
-## 🗄️ 数据与持久化
+- Node.js ≥ 18，npm（或 pnpm/yarn）
+- Python ≥ 3.9，`pip`（建议使用虚拟环境）
 
-- 初始数据位于 `src/config/data.json`，包含 `members` 与 `meetingDate`
-- 默认日期策略：若未指定，自动取“下一个周五”作为组会日期
-- 本地缓存键位：
-  - 会议日期：`meeting_date_v2`（`localStorage`）
-  - 管理员状态：`app_is_admin`（`sessionStorage`）
+## 快速开始
 
-### 启用本地后端（FastAPI，持久化到文件）
+- 启动后端（默认端口 `3001`）
+  - 在项目根或 `backend/` 目录下运行任一方式：
+  - 方式 A（根目录）：`uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 3001`
+  - 方式 B（进入后端目录）：`cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 3001`
 
-如需在刷新后保留成员顺序与名单，请启动 FastAPI 后端：
+- 启动前端（默认端口由 `vite.config.js` 指定为 `3002`）
+  - `cd frontend && npm install && npm run dev`
 
-```bash
-# 安装后端依赖（建议使用虚拟环境）
-pip install -r backend/requirements.txt
+打开浏览器访问 `http://localhost:3002`（或你的自定义端口）。
 
-# 启动服务（默认端口 8000）
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
+## 开发配置
 
-后端监听 `POST /api/save-data`，将数据写入 `src/config/data.json`。前端在变更后会自动调用保存接口。
+- 端口与主机：`frontend/vite.config.js` 中 `server.port` 与 `server.host`
+- 接口代理：`frontend/vite.config.js` 中 `server.proxy['/api'].target`
+  - 当前值为 `http://127.0.0.1:3001`，如使用 FastAPI 默认端口，请改为 `http://127.0.0.1:8000`
+- CORS：后端为开发环境开启了全量 CORS，线上由 Nginx 负责域名、协议与头部处理
 
-如之前使用了 Node/Express 后端（`server.js`），该文件已不再需要。
-已删除 Vite 开发插件与 Node 依赖，避免混乱。
+## 构建与部署
 
-## 端口与地址配置
+- 前端构建：`cd frontend && npm run build`，产物输出到 `frontend/dist`
+- Nginx 示例：`deploy/nginx.conf`
+  - 根路径提供静态文件，`/api` 代理到后端（默认 `127.0.0.1:3001`）
+  - 使用 `try_files` 以支持前端 SPA 刷新
 
-- 后端端口
-  - 默认运行：`uvicorn backend.main:app --host 0.0.0.0 --port 8000`
-  - 指定端口示例（改为 9000）：`uvicorn backend.main:app --host 0.0.0.0 --port 9000`
-- 前端端口
-  - 临时指定端口（改为 3005）：`npm run dev -- --host --port 3005`
-  - 或修改默认端口：`vite.config.js` 中 `server.port`
-- 前后端地址对齐
-  - 前端通过环境变量指定后端地址：编辑 `.env.development`
-  - 示例：`VITE_API_BASE=http://localhost:8000`（如果后端改为 9000，则改为 `http://localhost:9000`）
-  - 生产环境可在 `.env.production` 中设置同名变量以指向线上后端
- - 域名访问
-   - 若通过域名访问前端开发服务器，需在 `vite.config.js` 的 `server.allowedHosts` 中加入你的域名，例如：`['meeting.cuizl.cn']`
+## 接口一览（后端）
 
-## 🧭 使用说明
+- `GET /api/health` 服务健康检查
+- `GET /api/data` 获取数据
+- `POST /api/save-data` 保存数据
 
-- 进入管理员模式：点击右上角“管理模式”，输入密码 `1234`
-- 完成本周：当前两位主讲移至队尾，日期 +7 天
-- 本周休息：仅日期 +7 天，队列顺序保持不变
-- 调整顺序：在“调整顺序”弹窗中拖拽，或使用置顶/上移/下移/置底/删除按钮
-- 新增成员：管理员模式下，点击“新增成员”并确认
+数据模型（`backend/app/models.py`）：
+- `Member`: `{ id: string, name: string }`
+- `MeetingData`: `{ members: Member[], meetingDate?: string }`
 
-## 🧩 分组与队列规则
+数据持久化路径：`backend/data/data.json`（首次启动自动创建）
 
-- 当前主讲：队首两位
-- 后续队列：从第 3 位开始按 2 人一组分组展示
+## 常见问题
 
-## 📸 自定义与配置
+- 前端无法请求后端接口
+  - 检查后端是否已启动并监听正确端口
+  - 校验 `frontend/vite.config.js` 的代理目标是否与后端端口一致
+- 跨域错误（生产）
+  - 通过 Nginx 反向代理统一域名；开发环境由后端 CORS 放开
 
-- 修改初始名单与日期：直接编辑 `src/config/data.json`
-- Tailwind 通过 CDN 加载，若需离线/自定义构建，可改为本地安装 Tailwind 并配置 PostCSS
+## 许可与安全
 
-## 部署建议
-
-- 纯前端部署：可直接将构建产物部署到任意静态托管平台（如 GitHub Pages、Vercel 等）
-- 数据持久化：需要跨刷新保留名单与顺序时，请同时运行本地后端或替换为你的后端服务
-
-## 链接
-
-- GitHub：<https://github.com/CQUPT-CZL/Lab-Meeting-Lite>
-
-## ⚠️ 注意事项
-
-- 管理密码仅用于演示，不适用于公开环境；生产场景请接入真实鉴权方案
-- 本地后端默认写入项目内 `src/config/data.json`，请确保有写权限
+- 管理密码仅用于本地演示，不适用于公开环境；生产场景请接入真实鉴权
+- 项目不包含任何密钥或敏感配置，部署时请按需增加安全策略

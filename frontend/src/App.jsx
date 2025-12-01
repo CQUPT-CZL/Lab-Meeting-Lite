@@ -269,6 +269,9 @@ const App = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <a href="http://monitor.cuizl.cn/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors" aria-label="Monitor">
+              🚀
+            </a>
             <a href="https://github.com/CQUPT-CZL/Lab-Meeting-Lite" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors">
               <Github size={18} />
             </a>
