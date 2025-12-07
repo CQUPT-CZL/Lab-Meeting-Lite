@@ -3,7 +3,7 @@ import {
   Settings, Calendar, Unlock, CheckCircle, 
   Clock, Plus, Trash2, Users, Coffee, 
   ArrowLeftRight, GripVertical, ChevronsUp, ArrowUp, ArrowDown, ChevronsDown, Check, Github, Loader2,
-  Crown
+  Crown, RotateCcw
 } from 'lucide-react';
 
 // 【规范引用】引入独立的 API 服务
@@ -161,19 +161,63 @@ const App = () => {
     }
   };
 
-  // 1. 完成本周 (轮转前两个)
+  // 1. 完成本周 (每组各轮转1人，共2人)
   const handleCompleteMeeting = async () => {
     if (members.length === 0) return;
-    const newMembers = [...members];
-    // 取出前两个放到最后
-    const finished = newMembers.splice(0, Math.min(2, newMembers.length));
-    newMembers.push(...finished);
+    
+    // 分离组 A 和组 B
+    const groupA = members.filter(m => m.group === 'A');
+    const groupB = members.filter(m => m.group === 'B');
+    // 如果没有分组信息（兼容旧数据），全当 A 组
+    const others = members.filter(m => m.group !== 'A' && m.group !== 'B');
+
+    // 轮转逻辑：每组取第1个放到该组最后
+    const rotateGroup = (list) => {
+      if (list.length < 2) return list; // 只有1人就不动了，或者视需求
+      const [first, ...rest] = list;
+      return [...rest, first];
+    };
+
+    const newGroupA = rotateGroup(groupA);
+    const newGroupB = rotateGroup(groupB);
+    
+    // 合并回一个大列表
+    const newMembers = [...newGroupA, ...newGroupB, ...others];
     
     // 日期 + 7天
     const newDate = new Date(meetingDate);
     newDate.setDate(newDate.getDate() + 7);
     
-    await handleSave(newMembers, newDate, '🎉 本周已完成，列表已轮转');
+    await handleSave(newMembers, newDate, '🎉 本周已完成，各组已轮转');
+  };
+
+  // 1.5 撤销本周 (反向轮转)
+  const handleUndoMeeting = async () => {
+    if (members.length === 0) return;
+
+    // 分离组 A 和组 B
+    const groupA = members.filter(m => m.group === 'A');
+    const groupB = members.filter(m => m.group === 'B');
+    const others = members.filter(m => m.group !== 'A' && m.group !== 'B');
+
+    // 反向轮转逻辑：每组取最后一个放到该组最前
+    const reverseRotateGroup = (list) => {
+      if (list.length < 2) return list;
+      const last = list[list.length - 1];
+      const rest = list.slice(0, list.length - 1);
+      return [last, ...rest];
+    };
+
+    const newGroupA = reverseRotateGroup(groupA);
+    const newGroupB = reverseRotateGroup(groupB);
+
+    const newMembers = [...newGroupA, ...newGroupB, ...others];
+
+    // 日期 - 7天
+    const newDate = new Date(meetingDate);
+    newDate.setDate(newDate.getDate() - 7);
+
+    await handleSave(newMembers, newDate, '⏪ 已撤销上周操作，恢复顺序');
   };
 
   // 2. 顺延一周 (不改人，只改时间)
@@ -186,21 +230,51 @@ const App = () => {
   // 3. 新增成员
   const handleAddMember = async () => {
     if (!newMemberName.trim()) return;
-    const newItem = { id: Date.now().toString(), name: newMemberName.trim() };
+    // 默认加到人数少的那一组，或者默认 A 组？这里先简单默认 A 组，或者让用户选？
+    // 为了简化，默认加到 A 组，后续可以在排序界面调整分组（需要增加调整分组功能）
+    // 或者这里简单点，随机分配或默认 A。
+    // 更好的方式：默认 A 组。
+    const newItem = { id: Date.now().toString(), name: newMemberName.trim(), group: 'A' };
     const nextMembers = [...members, newItem];
     
-    await handleSave(nextMembers, meetingDate, '已添加新成员');
+    await handleSave(nextMembers, meetingDate, '已添加新成员(默认A组)');
     setNewMemberName('');
     setShowAddModal(false);
   };
 
   // 4. 排序相关
   const openSortModal = () => { 
-    setPendingMembers([...members]); 
+    // 排序模态框里，我们还是展示所有成员，但最好能区分组，或者让用户可以直接改组
+    // 为了简化，这里先只支持拖拽排序，不改组。或者支持改组？
+    // 如果拖拽导致 A 组的人跑到了 B 组的人后面，怎么算？
+    // 现在的逻辑是：数组的前面是 A，后面是 B？ 不，现在有 explicit 的 group 字段。
+    // 所以拖拽只是改变数组里的顺序，但 group 字段不动？
+    // 如果用户想把某人从 A 组移到 B 组，需要改 group 字段。
+    
+    // 简单起见：排序界面只负责“谁先谁后”，不改组。
+    // 但是等等，我们的显示逻辑是：
+    // A 组第一个 -> 主讲1
+    // B 组第一个 -> 主讲2
+    // 所以 A 组内部顺序很重要，B 组内部顺序也很重要。
+    // 最好把 A 组和 B 组分开排序？
+    
+    // 重新设计排序模态框：分为两个列表，分别排序？
+    // 或者一个大列表，但是标明组别？
+    // 为了快速交付，我们先用一个列表，但是允许用户把人拖来拖去。
+    // 并在保存时，根据某种规则（比如前半部分是A，后半部分是B？）或者保持原组别？
+    
+    // 鉴于用户需求是“分组轮询”，最直观的是两个独立的队列。
+    // 让我们改造 SortModal，支持 A/B 两个 Tab 或者左右两列。
+    // 这里先简单处理：只排 A 组（如果用户主要关心 A 组？）不行，两组都要排。
+    
+    // 方案：SortModal 里显示两个 list，分别排序。
+    setPendingMembers(members); // 这里存的是所有 members
     setShowSortModal(true); 
   };
   
   const saveSortChanges = async () => {
+    // 保存时，pendingMembers 里的顺序就是新的顺序
+    // 注意：如果是分开排序的 UI，需要合并回 pendingMembers
     if (pendingMembers.length > 0) {
       await handleSave(pendingMembers, meetingDate, '顺序调整已保存');
     }
@@ -208,37 +282,98 @@ const App = () => {
     setPendingMembers([]);
   };
 
-  // 模态框内的各种移动逻辑
-  const moveItemInModal = (from, to) => {
-    if (to < 0 || to >= pendingMembers.length) return;
-    const list = [...pendingMembers];
+  // 模态框内的各种移动逻辑 (针对单一列表的，现在需要改造成支持分组排序或者单一列表排序)
+  // 让我们把 SortModal 改成只显示 A 组或 B 组，或者两个列表。
+  // 既然数据结构是平铺的，我们可以在 SortModal 里把它们拆开展示，操作完再合并？
+  
+  // 临时状态需要存两个数组？
+  const [pendingGroupA, setPendingGroupA] = useState([]);
+  const [pendingGroupB, setPendingGroupB] = useState([]);
+
+  useEffect(() => {
+    if (showSortModal) {
+      setPendingGroupA(members.filter(m => m.group === 'A'));
+      setPendingGroupB(members.filter(m => m.group === 'B'));
+    }
+  }, [showSortModal, members]);
+
+  const handleSaveSort = async () => {
+     const newMembers = [...pendingGroupA, ...pendingGroupB, ...members.filter(m => m.group !== 'A' && m.group !== 'B')];
+     await handleSave(newMembers, meetingDate, '分组顺序已保存');
+     setShowSortModal(false);
+  };
+  
+  // 针对特定组的移动函数
+  const moveItemInGroup = (groupType, from, to) => {
+    const list = groupType === 'A' ? [...pendingGroupA] : [...pendingGroupB];
+    if (to < 0 || to >= list.length) return;
     const [item] = list.splice(from, 1);
     list.splice(to, 0, item);
-    setPendingMembers(list);
+    
+    if (groupType === 'A') setPendingGroupA(list);
+    else setPendingGroupB(list);
   };
-  const removeMemberInModal = (id) => {
-    setPendingMembers(prev => prev.filter(m => m.id !== id));
+  
+  const removeMemberInGroup = (groupType, id) => {
+     if (groupType === 'A') setPendingGroupA(prev => prev.filter(m => m.id !== id));
+     else setPendingGroupB(prev => prev.filter(m => m.id !== id));
   };
-  const swapSpeakersInModal = () => {
-    if (pendingMembers.length < 2) return;
-    const list = [...pendingMembers];
-    [list[0], list[1]] = [list[1], list[0]];
-    setPendingMembers(list);
+  
+  // 切换分组 (A -> B, B -> A)
+  const toggleGroup = (member) => {
+    if (member.group === 'A') {
+      // A -> B
+      const newM = { ...member, group: 'B' };
+      setPendingGroupA(prev => prev.filter(m => m.id !== member.id));
+      setPendingGroupB(prev => [...prev, newM]);
+    } else {
+      // B -> A
+      const newM = { ...member, group: 'A' };
+      setPendingGroupB(prev => prev.filter(m => m.id !== member.id));
+      setPendingGroupA(prev => [...prev, newM]);
+    }
   };
 
-  const handleSortDragEnd = () => {
+  const handleSortDragEndA = () => {
     const from = dragItemIndex.current;
     const to = dragOverIndex.current;
     if (from !== null && to !== null && from !== to) {
-      moveItemInModal(from, to);
+      moveItemInGroup('A', from, to);
+    }
+    dragItemIndex.current = null;
+    dragOverIndex.current = null;
+  };
+
+  const handleSortDragEndB = () => {
+    const from = dragItemIndex.current;
+    const to = dragOverIndex.current;
+    if (from !== null && to !== null && from !== to) {
+      moveItemInGroup('B', from, to);
     }
     dragItemIndex.current = null;
     dragOverIndex.current = null;
   };
 
   // 计算分组
-  const waitingList = members.length > 2 ? members.slice(2) : [];
-  const waitingGroups = Array.from({ length: Math.ceil(waitingList.length / 2) }, (_, i) => waitingList.slice(i * 2, i * 2 + 2));
+  // 现在的逻辑变了：
+  // 1. 找出 A 组第 1 个作为本周主讲 1
+  // 2. 找出 B 组第 1 个作为本周主讲 2
+  // 3. 剩下的 A 组排队
+  // 4. 剩下的 B 组排队
+  
+  const groupA = members.filter(m => m.group === 'A');
+  const groupB = members.filter(m => m.group === 'B');
+  const others = members.filter(m => m.group !== 'A' && m.group !== 'B'); // 异常数据
+
+  const speakerA = groupA[0];
+  const speakerB = groupB[0];
+  
+  const waitingA = groupA.slice(1);
+  const waitingB = groupB.slice(1);
+
+  // 显示用的 speaker 列表
+  const currentSpeakers = [speakerA, speakerB].filter(Boolean); // 可能某组没人
+
 
   // --- 界面渲染 ---
 
@@ -306,7 +441,9 @@ const App = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[0, 1].map((index) => {
-                const member = members[index];
+                // index 0 -> A组, index 1 -> B组
+                const member = index === 0 ? speakerA : speakerB;
+                const groupName = index === 0 ? 'A组' : 'B组';
                 const isNoble = member && isVIP(member.name); 
 
                 return (
@@ -314,7 +451,7 @@ const App = () => {
                     {member ? (
                       <>
                         <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-xl mb-5 shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 ${isNoble ? 'bg-gradient-to-tr from-amber-100 to-amber-50 text-amber-500 border border-amber-200' : 'bg-gradient-to-tr from-slate-50 to-white text-slate-300 border border-slate-100'}`}>
-                           {isNoble ? <Crown size={28} fill="currentColor"/> : <span className="group-hover:text-teal-500 transition-colors">0{index + 1}</span>}
+                           {isNoble ? <Crown size={28} fill="currentColor"/> : <span className="group-hover:text-teal-500 transition-colors">{groupName}</span>}
                         </div>
                         <h3 className={`text-3xl font-bold tracking-tight mb-2 transition-colors flex items-center gap-2 ${isNoble ? 'text-amber-500 drop-shadow-sm' : 'text-slate-800 group-hover:text-teal-700'}`}>
                           {member.name}
@@ -322,7 +459,7 @@ const App = () => {
                         <div className={`h-1 rounded-full transition-all duration-300 ${isNoble ? 'w-16 bg-amber-300' : 'w-8 bg-teal-100 group-hover:w-16 group-hover:bg-teal-400'}`}></div>
                       </>
                     ) : (
-                      <div className="text-slate-300 flex flex-col items-center"><Users size={32} className="mb-2 opacity-30"/><span className="text-sm font-medium">虚位以待</span></div>
+                      <div className="text-slate-300 flex flex-col items-center"><Users size={32} className="mb-2 opacity-30"/><span className="text-sm font-medium">{groupName} 虚位以待</span></div>
                     )}
                   </div>
                 );
@@ -333,9 +470,10 @@ const App = () => {
 
         {/* Admin Controls */}
         {isAdmin && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {[
               { label: '完成本周', icon: CheckCircle, color: 'text-emerald-400', onClick: handleCompleteMeeting, bg: 'bg-slate-800 hover:bg-slate-900 text-white' },
+              { label: '撤销完成', icon: RotateCcw, color: 'text-rose-400', onClick: handleUndoMeeting, bg: 'bg-slate-800 hover:bg-slate-900 text-white' },
               { label: '调整顺序', icon: ArrowLeftRight, color: 'text-teal-200', onClick: openSortModal, bg: 'bg-teal-600 hover:bg-teal-700 text-white' },
               { label: '本周休息', icon: Coffee, color: 'text-amber-500', onClick: handlePostpone, bg: 'bg-white hover:bg-amber-50 text-slate-700 border border-slate-200' },
               { label: '新增成员', icon: Plus, color: 'text-teal-600', onClick: () => setShowAddModal(true), bg: 'bg-white hover:bg-teal-50 text-slate-700 border border-slate-200' },
@@ -354,44 +492,76 @@ const App = () => {
         )}
 
         {/* Waiting List */}
-        <section className="animate-in slide-in-from-bottom-8 duration-700 delay-100">
-          <div className="flex items-center justify-between mb-5 px-2">
-            <div className="flex items-center gap-2">
-               <div className="w-1 h-4 bg-teal-500 rounded-full"></div>
-               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">后续队列</h3>
+        <section className="animate-in slide-in-from-bottom-8 duration-700 delay-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* A组排队 */}
+          <div>
+            <div className="flex items-center justify-between mb-5 px-2">
+              <div className="flex items-center gap-2">
+                 <div className="w-1 h-4 bg-teal-500 rounded-full"></div>
+                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">A组后续队列</h3>
+              </div>
+              <span className="text-xs font-medium text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-100 shadow-sm">
+                共 {waitingA.length} 人
+              </span>
             </div>
-            <span className="text-xs font-medium text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-100 shadow-sm">
-              共 {waitingList.length} 人
-            </span>
+            
+            <div className="space-y-3">
+              {waitingA.length > 0 ? (
+                waitingA.map((m, i) => {
+                   const isNoble = isVIP(m.name);
+                   return (
+                     <div key={m.id} className="group bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                        <div className="w-8 flex flex-col items-center justify-center border-r border-slate-100 pr-3">
+                           <span className="text-lg font-black text-slate-300 group-hover:text-teal-400 transition-colors">{i + 1}</span>
+                        </div>
+                        <div className={`flex items-center gap-2 font-medium ${isNoble ? 'text-amber-600' : 'text-slate-700'}`}>
+                           {m.name}
+                           {isNoble && <Crown size={14} className="text-amber-500" fill="currentColor"/>}
+                        </div>
+                     </div>
+                   )
+                })
+              ) : (
+                <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-3xl text-slate-300 text-sm font-medium">A组暂无排队</div>
+              )}
+            </div>
+          </div>
+
+          {/* B组排队 */}
+          <div>
+            <div className="flex items-center justify-between mb-5 px-2">
+              <div className="flex items-center gap-2">
+                 <div className="w-1 h-4 bg-indigo-500 rounded-full"></div>
+                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">B组后续队列</h3>
+              </div>
+              <span className="text-xs font-medium text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-100 shadow-sm">
+                共 {waitingB.length} 人
+              </span>
+            </div>
+            
+            <div className="space-y-3">
+              {waitingB.length > 0 ? (
+                waitingB.map((m, i) => {
+                   const isNoble = isVIP(m.name);
+                   return (
+                     <div key={m.id} className="group bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                        <div className="w-8 flex flex-col items-center justify-center border-r border-slate-100 pr-3">
+                           <span className="text-lg font-black text-slate-300 group-hover:text-indigo-400 transition-colors">{i + 1}</span>
+                        </div>
+                        <div className={`flex items-center gap-2 font-medium ${isNoble ? 'text-amber-600' : 'text-slate-700'}`}>
+                           {m.name}
+                           {isNoble && <Crown size={14} className="text-amber-500" fill="currentColor"/>}
+                        </div>
+                     </div>
+                   )
+                })
+              ) : (
+                <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-3xl text-slate-300 text-sm font-medium">B组暂无排队</div>
+              )}
+            </div>
           </div>
           
-          <div className="space-y-3">
-            {waitingGroups.map((group, i) => (
-              <div key={i} className="group bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center gap-5">
-                <div className="w-10 flex flex-col items-center justify-center border-r border-slate-100 pr-5">
-                  <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Group</span>
-                  <span className="text-xl font-black text-slate-300 group-hover:text-teal-400 transition-colors">{i + 2}</span>
-                </div>
-                <div className="flex gap-3 flex-wrap">
-                  {group.map(m => {
-                    const isNoble = isVIP(m.name);
-                    return (
-                      <div key={m.id} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition-all font-medium ${
-                        isNoble 
-                          ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' 
-                          : 'bg-slate-50 border-slate-100 text-slate-600 group-hover:bg-teal-50/50 group-hover:border-teal-100 group-hover:text-teal-800'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full transition-colors ${isNoble ? 'bg-amber-400' : 'bg-slate-300 group-hover:bg-teal-400'}`}></div>
-                        {m.name}
-                        {isNoble && <Crown size={14} className="text-amber-500" fill="currentColor"/>}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-            {waitingGroups.length === 0 && <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-3xl text-slate-300 text-sm font-medium">暂无排队人员</div>}
-          </div>
         </section>
       </main>
 
@@ -400,40 +570,61 @@ const App = () => {
       {/* Sort Modal */}
       {showSortModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={(e) => { if(e.target === e.currentTarget && !isSaving) setShowSortModal(false); }}>
-          <div className="w-full max-w-lg bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white z-10">
-              <div><h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">调整顺序</h3><p className="text-xs text-slate-400 mt-1">长按拖拽或点击按钮调整</p></div>
-              <button onClick={swapSpeakersInModal} disabled={isSaving} className="text-xs font-bold bg-teal-50 text-teal-700 px-4 py-2 rounded-xl hover:bg-teal-100 transition-colors disabled:opacity-50">交换前两名</button>
+              <div><h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">调整顺序 & 分组</h3><p className="text-xs text-slate-400 mt-1">拖拽调整顺序，点击切换分组</p></div>
+              <button onClick={handleSaveSort} disabled={isSaving} className="text-xs font-bold bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50">保存更改</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
-              {pendingMembers.map((m, index) => {
-                const isSpeaker = index < 2;
-                const isNoble = isVIP(m.name);
-                return (
-                  <div key={m.id} draggable onDragStart={() => dragItemIndex.current = index} onDragEnter={() => dragOverIndex.current = index} onDragEnd={handleSortDragEnd} onDragOver={e => e.preventDefault()} className={`flex items-center gap-3 p-3 rounded-xl border transition-all select-none group ${isSpeaker ? 'bg-white border-teal-200 shadow-sm ring-1 ring-teal-50' : 'bg-white border-slate-100 hover:border-teal-200'}`}>
-                    <div className="text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-500"><GripVertical size={18} /></div>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 ${isSpeaker ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`font-bold truncate flex items-center gap-1 ${isNoble ? 'text-amber-600' : 'text-slate-700'}`}>
-                        {m.name} {isNoble && <Crown size={14} fill="currentColor" />}
-                      </div>
-                      <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{isSpeaker ? <span className="text-teal-600">本周主讲</span> : `排队 GRP ${Math.floor((index-2)/2) + 2}`}</div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => moveItemInModal(index, 0)} className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded"><ChevronsUp size={16}/></button>
-                      <button onClick={() => moveItemInModal(index, index - 1)} disabled={index === 0} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowUp size={16}/></button>
-                      <button onClick={() => moveItemInModal(index, index + 1)} disabled={index === pendingMembers.length - 1} className="p-1.5 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded"><ArrowDown size={16}/></button>
-                      <button onClick={() => moveItemInModal(index, pendingMembers.length - 1)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded"><ChevronsDown size={16}/></button>
-                      <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                      <button onClick={() => removeMemberInModal(m.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 size={16}/></button>
-                    </div>
-                  </div>
-                )
-              })}
+            
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Group A Column */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+                 <h4 className="font-bold text-teal-600 flex items-center gap-2"><span className="bg-teal-100 px-2 py-0.5 rounded text-xs">A 组</span> <span>{pendingGroupA.length} 人</span></h4>
+                 <div className="space-y-2 flex-1">
+                    {pendingGroupA.map((m, index) => {
+                       const isSpeaker = index === 0;
+                       const isNoble = isVIP(m.name);
+                       return (
+                          <div key={m.id} draggable onDragStart={() => dragItemIndex.current = index} onDragEnter={() => dragOverIndex.current = index} onDragEnd={handleSortDragEndA} onDragOver={e => e.preventDefault()} className={`flex items-center gap-2 p-2 rounded-xl border transition-all select-none ${isSpeaker ? 'bg-teal-50/50 border-teal-200' : 'bg-white border-slate-100'}`}>
+                             <div className="text-slate-300 cursor-grab active:cursor-grabbing"><GripVertical size={16} /></div>
+                             <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${isSpeaker ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div>
+                             <div className="flex-1 font-bold text-sm text-slate-700">{m.name}</div>
+                             <button onClick={() => toggleGroup(m)} className="text-[10px] font-bold px-2 py-1 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-600 rounded transition-colors">移至B组</button>
+                             <button onClick={() => removeMemberInGroup('A', m.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={14}/></button>
+                          </div>
+                       )
+                    })}
+                    {pendingGroupA.length === 0 && <div className="text-center text-slate-300 py-4 text-xs">暂无成员</div>}
+                 </div>
+              </div>
+
+              {/* Group B Column */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+                 <h4 className="font-bold text-indigo-600 flex items-center gap-2"><span className="bg-indigo-100 px-2 py-0.5 rounded text-xs">B 组</span> <span>{pendingGroupB.length} 人</span></h4>
+                 <div className="space-y-2 flex-1">
+                    {pendingGroupB.map((m, index) => {
+                       const isSpeaker = index === 0;
+                       const isNoble = isVIP(m.name);
+                       return (
+                          <div key={m.id} draggable onDragStart={() => dragItemIndex.current = index} onDragEnter={() => dragOverIndex.current = index} onDragEnd={handleSortDragEndB} onDragOver={e => e.preventDefault()} className={`flex items-center gap-2 p-2 rounded-xl border transition-all select-none ${isSpeaker ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-100'}`}>
+                             <div className="text-slate-300 cursor-grab active:cursor-grabbing"><GripVertical size={16} /></div>
+                             <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs ${isSpeaker ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{index + 1}</div>
+                             <div className="flex-1 font-bold text-sm text-slate-700">{m.name}</div>
+                             <button onClick={() => toggleGroup(m)} className="text-[10px] font-bold px-2 py-1 bg-slate-100 hover:bg-teal-100 hover:text-teal-600 rounded transition-colors">移至A组</button>
+                             <button onClick={() => removeMemberInGroup('B', m.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={14}/></button>
+                          </div>
+                       )
+                    })}
+                    {pendingGroupB.length === 0 && <div className="text-center text-slate-300 py-4 text-xs">暂无成员</div>}
+                 </div>
+              </div>
+
             </div>
-            <div className="p-4 border-t border-slate-100 bg-white grid grid-cols-2 gap-3">
-              <button onClick={() => setShowSortModal(false)} disabled={isSaving} className="py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-bold transition-all border border-transparent hover:border-slate-200 disabled:opacity-50">取消</button>
-              <button onClick={saveSortChanges} disabled={isSaving} className="py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2">
+            
+            <div className="p-4 border-t border-slate-100 bg-white flex justify-end gap-3">
+              <button onClick={() => setShowSortModal(false)} disabled={isSaving} className="px-6 py-2.5 text-slate-500 hover:bg-slate-50 rounded-xl font-bold transition-all border border-transparent hover:border-slate-200 disabled:opacity-50">取消</button>
+              <button onClick={handleSaveSort} disabled={isSaving} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-all shadow-lg shadow-slate-200 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2">
                 {isSaving && <Loader2 size={18} className="animate-spin"/>} 确认并保存
               </button>
             </div>
