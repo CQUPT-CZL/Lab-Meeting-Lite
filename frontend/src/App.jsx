@@ -3,7 +3,7 @@ import {
   Settings, Calendar, Unlock, CheckCircle, 
   Clock, Plus, Trash2, Users, Coffee, 
   ArrowLeftRight, GripVertical, ChevronsUp, ArrowUp, ArrowDown, ChevronsDown, Check, Github, Loader2,
-  Crown, RotateCcw
+  Crown, RotateCcw, Info
 } from 'lucide-react';
 
 // 【规范引用】引入独立的 API 服务
@@ -404,6 +404,9 @@ const App = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <a href="http://food.cuizl.cn" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors" aria-label="Food">
+              <img src="/food.svg" alt="Food" className="w-5 h-5" />
+            </a>
             <a href="http://monitor.cuizl.cn/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center justify-center w-9 h-9 rounded-full border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-black transition-colors" aria-label="Monitor">
               🚀
             </a>
@@ -421,6 +424,7 @@ const App = () => {
       </nav>
 
       <main className="max-w-5xl mx-auto p-4 md:p-8 space-y-8 animate-in fade-in duration-500">
+        
         {/* Header Section */}
         <section className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 p-6 md:p-10 relative overflow-hidden border border-white">
           <div className="absolute top-0 right-0 w-80 h-80 bg-teal-50 rounded-full blur-3xl opacity-60 pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
@@ -436,6 +440,11 @@ const App = () => {
                  <p className="text-slate-400 font-medium text-sm mt-1.5 flex items-center gap-1.5 bg-slate-50 w-fit px-3 py-1 rounded-full">
                    <Clock size={14} className="text-teal-500" /> {formatFriendlyDate(meetingDate)}
                  </p>
+              </div>
+              
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-full text-xs text-slate-500 font-medium hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200 transition-all cursor-help shadow-sm group">
+                  <Info size={14} className="text-slate-400 group-hover:text-teal-500 transition-colors" />
+                  <span>如需变动请联系：赵佳洋</span>
               </div>
             </div>
             
