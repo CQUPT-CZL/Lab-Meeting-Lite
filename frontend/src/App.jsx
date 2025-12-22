@@ -442,9 +442,9 @@ const App = () => {
                  </p>
               </div>
               
-              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-full text-xs text-slate-500 font-medium hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200 transition-all cursor-help shadow-sm group">
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-100 px-3 py-1.5 rounded-full text-xs text-slate-500 font-medium hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200 transition-all shadow-sm group">
                   <Info size={14} className="text-slate-400 group-hover:text-teal-500 transition-colors" />
-                  <span>如需变动请联系：赵佳洋</span>
+                  <span>如需变动请联系：<span className="text-teal-600 font-bold bg-teal-50 px-1 py-0.5 rounded border border-teal-100">赵佳洋</span></span>
               </div>
             </div>
             
